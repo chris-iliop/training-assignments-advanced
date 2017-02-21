@@ -213,71 +213,14 @@ public final class TGALoader implements AssetLoader {
             byte blue = 0;
             byte alpha = 0;
 
-            // Faster than doing a 16-or-24-or-32 check on each individual pixel,
-            // just make a seperate loop for each.
+//            // Faster than doing a 16-or-24-or-32 check on each individual pixel,
+//            // just make a seperate loop for each.
             if (pixelDepth == 16) {
-                byte[] data = new byte[2];
-                float scalar = 255f / 31f;
-                for (int i = 0; i <= (height - 1); i++) {
-                    if (!flip) {
-                        rawDataIndex = (height - 1 - i) * width * dl;
-                    }
-                    for (int j = 0; j < width; j++) {
-                        data[1] = dis.readByte();
-                        data[0] = dis.readByte();
-                        rawData[rawDataIndex++] = (byte) (int) (getBitsAsByte(data, 1, 5) * scalar);
-                        rawData[rawDataIndex++] = (byte) (int) (getBitsAsByte(data, 6, 5) * scalar);
-                        rawData[rawDataIndex++] = (byte) (int) (getBitsAsByte(data, 11, 5) * scalar);
-                        if (dl == 4) {
-                            // create an alpha channel
-                            alpha = getBitsAsByte(data, 0, 1);
-                            if (alpha == 1) {
-                                alpha = (byte) 255;
-                            }
-                            rawData[rawDataIndex++] = alpha;
-                        }
-                    }
-                }
-
-                format = dl == 4 ? Format.RGBA8 : Format.RGB8;
+                format = trueColor16(dis, rawData);
             } else if (pixelDepth == 24) {
-                for (int y = 0; y < height; y++) {
-                    if (!flip) {
-                        rawDataIndex = (height - 1 - y) * width * dl;
-                    } else {
-                        rawDataIndex = y * width * dl;
-                    }
-
-                    dis.readFully(rawData, rawDataIndex, width * dl);
-//                    for (int x = 0; x < width; x++) {
-                    //read scanline
-//                        blue = dis.readByte();
-//                        green = dis.readByte();
-//                        red = dis.readByte();
-//                        rawData[rawDataIndex++] = red;
-//                        rawData[rawDataIndex++] = green;
-//                        rawData[rawDataIndex++] = blue;
-//                    }
-                }
-                format = Format.BGR8;
+                format = trueColor24 (dis, rawData, flip);
             } else if (pixelDepth == 32) {
-                for (int i = 0; i <= (height - 1); i++) {
-                    if (!flip) {
-                        rawDataIndex = (height - 1 - i) * width * dl;
-                    }
-
-                    for (int j = 0; j < width; j++) {
-                        blue = dis.readByte();
-                        green = dis.readByte();
-                        red = dis.readByte();
-                        alpha = dis.readByte();
-                        rawData[rawDataIndex++] = red;
-                        rawData[rawDataIndex++] = green;
-                        rawData[rawDataIndex++] = blue;
-                        rawData[rawDataIndex++] = alpha;
-                    }
-                }
-                format = Format.RGBA8;
+                format = trueColor32 (dis, rawData, flip);
             } else {
                 throw new IOException("Unsupported TGA true color depth: " + pixelDepth);
             }
@@ -476,7 +419,96 @@ public final class TGALoader implements AssetLoader {
         textureImage.setData(scratch);
         return textureImage;
     }
+    
+    
+    
+    
+    
+    private Format trueColor16 (DataInputStream dis, byte[] rawData) {
+    	int rawDataIndex = 0;
+        byte[] data = new byte[2];
+        float scalar = 255f / 31f;
+        int height = getHeight(dis);
+        int width = getWidth(dis);
+        int dl = 3;
+        
+        for (int i = 0; i <= (height - 1); i++) {
+            if (!flip) {
+                rawDataIndex = (height - 1 - i) * width * dl;
+            }
+            for (int j = 0; j < width; j++) {
+                data[1] = dis.readByte();
+                data[0] = dis.readByte();
+                rawData[rawDataIndex++] = (byte) (int) (getBitsAsByte(data, 1, 5) * scalar);
+                rawData[rawDataIndex++] = (byte) (int) (getBitsAsByte(data, 6, 5) * scalar);
+                rawData[rawDataIndex++] = (byte) (int) (getBitsAsByte(data, 11, 5) * scalar);
+            }
+        }
+        return Format.RGB8;
+    }
+    
+    private Format trueColor24 (DataInputStream dis, byte[] rawData, boolean flip) {
+    	int rawDataIndex = 0;      
+        int height = getHeight(dis);
+        int width = getWidth(dis);
+        int dl = 3;
+        
+        for (int y = 0; y < height; y++) {
+            if (!flip) {
+                rawDataIndex = (height - 1 - y) * width * dl;
+            } else {
+                rawDataIndex = y * width * dl;
+            }
 
+            dis.readFully(rawData, rawDataIndex, width * dl);
+        return Format.BGR8;
+    }
+        
+    private Format trueColor32 (DataInputStream dis, byte[] rawData, boolean flip) {
+    	int rawDataIndex = 0;      
+        int height = getHeight(dis);
+        int width = getWidth(dis);
+        int dl = 3;
+        byte red = 0;
+        byte green = 0;
+        byte blue = 0;
+        byte alpha = 0;
+        
+        for (int i = 0; i <= (height - 1); i++) {
+            if (!flip) {
+                rawDataIndex = (height - 1 - i) * width * dl;
+            }
+
+            for (int j = 0; j < width; j++) {
+                blue = dis.readByte();
+                green = dis.readByte();
+                red = dis.readByte();
+                alpha = dis.readByte();
+                rawData[rawDataIndex++] = red;
+                rawData[rawDataIndex++] = green;
+                rawData[rawDataIndex++] = blue;
+                rawData[rawDataIndex++] = alpha;
+            }
+        }
+        return Format.RGBA8;
+    }
+        
+    private int getHeight(DataInputStream dis) {
+    	return flipEndian(dis.readShort());
+    }
+
+    private int getWidth(DataInputStream dis) {
+    	return flipEndian(dis.readShort());
+    }	
+     	
+    	
+    
+    
+    
+    
+    
+    
+    
     private static byte getBitsAsByte(byte[] data, int offset, int length) {
         int offsetBytes = offset / 8;
         int indexBits = offset % 8;
