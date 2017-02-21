@@ -280,16 +280,6 @@ public class DDSLoader implements AssetLoader {
                         normal = true;
                     }
                     break;
-                /*
-                case PF_ATI1:
-                    bpp = 4;
-                    pixelFormat = Image.Format.LTC;
-                    break;
-                case PF_ATI2:
-                    bpp = 8;
-                    pixelFormat = Image.Format.LATC;
-                    break;
-                */
                 case PF_DX10:
                     compressed = false;
                     directx10 = true;
@@ -321,77 +311,93 @@ public class DDSLoader implements AssetLoader {
             }
         } else {
             compressed = false;
-
+            
             // skip fourCC
             in.readInt();
-
             bpp = in.readInt();
             redMask = in.readInt();
             greenMask = in.readInt();
             blueMask = in.readInt();
             alphaMask = in.readInt();
+        	grayscaleOrAlpha = true;
+        	
+        	//refactor start
+        	if (is(pfFlags, DDPF_GRAYSCALE) && is(pfFlags, DDPF_ALPHAPIXELS) && (bpp != 16))
+        		throw new IOException("Unsupported GrayscaleAlpha BPP: " + bpp);
+        	
+        	if (is(pfFlags, DDPF_GRAYSCALE) && is(pfFlags, DDPF_ALPHAPIXELS) )
+        	{
+        		pixelFormat = Format.Luminance8Alpha8;
+        		calculatePitchOrSize();
+        		return;
+        	}
+        	
+        	if ((is(pfFlags, DDPF_GRAYSCALE)) && bpp != 8)
+        		throw new IOException("Unsupported Grayscale BPP: " + bpp);
 
-            if (is(pfFlags, DDPF_RGB)) {
-                if (is(pfFlags, DDPF_ALPHAPIXELS)) {
-                    if (bpp == 16) {
-                        pixelFormat = Format.RGB5A1;
-                    } else {
-                        pixelFormat = Format.RGBA8;
-                    }
-                } else {
-                    if (bpp == 16) {
-                        pixelFormat = Format.RGB565;
-                    } else {
-                        pixelFormat = Format.RGB8;
-                    }
-                }
-            } else if (is(pfFlags, DDPF_GRAYSCALE) && is(pfFlags, DDPF_ALPHAPIXELS)) {
-                switch (bpp) {
-                    case 16:
-                        pixelFormat = Format.Luminance8Alpha8;
-                        break;
-                    default:
-                        throw new IOException("Unsupported GrayscaleAlpha BPP: " + bpp);
-                }
-                grayscaleOrAlpha = true;
-            } else if (is(pfFlags, DDPF_GRAYSCALE)) {
-                switch (bpp) {
-                    case 8:
-                        pixelFormat = Format.Luminance8;
-                        break;
-                    default:
-                        throw new IOException("Unsupported Grayscale BPP: " + bpp);
-                }
-                grayscaleOrAlpha = true;
-            } else if (is(pfFlags, DDPF_ALPHA)) {
-                switch (bpp) {
-                    case 8:
-                        pixelFormat = Format.Alpha8;
-                        break;
-                    default:
-                        throw new IOException("Unsupported Alpha BPP: " + bpp);
-                }
-                grayscaleOrAlpha = true;
-            } else {
-                throw new IOException("Unknown PixelFormat in DDS file");
-            }
+        	if ((is(pfFlags, DDPF_GRAYSCALE)))
+        	{
+        		pixelFormat = Format.Luminance8;
+        		calculatePitchOrSize();
+        		return;
+        	}
+        	
+        	if ((is(pfFlags, DDPF_ALPHA)) && bpp != 8)
+				throw new IOException("Unsupported Alpha BPP: " + bpp);
+				
+			if (is(pfFlags, DDPF_ALPHA))
+			{
+				pixelFormat = Format.Alpha8;
+				calculatePitchOrSize();
+        		return;
+			}
 
-            int size = (bpp / 8 * width);
-
-            if (is(flags, DDSD_LINEARSIZE)) {
-                if (pitchOrSize == 0) {
-                    logger.warning("Linear size said to contain valid value but does not");
-                    pitchOrSize = size;
-                } else if (pitchOrSize != size) {
-                    logger.log(Level.WARNING, "Expected size = {0}, real = {1}",
-                            new Object[]{size, pitchOrSize});
-                }
-            } else {
-                pitchOrSize = size;
-            }
+			if (!is(pfFlags, DDPF_RGB))
+				throw new IOException("Unknown PixelFormat in DDS file");
+			
+			grayscaleOrAlpha = false;
+			
+			if (bpp == 16)
+			{
+				if (is(pfFlags, DDPF_ALPHAPIXELS))
+				{
+					pixelFormat = Format.RGB5A1;
+				}
+				
+				pixelFormat = Format.RGB565;
+			}
+			else
+			{
+				if (is(pfFlags, DDPF_ALPHAPIXELS))
+				{
+					pixelFormat = Format.RGBA8;
+				}
+				
+				pixelFormat = Format.RGB8;
+			}
+			
+			calculatePitchOrSize();
         }
     }
 
+    private void calculatePitchOrSize()
+    {
+		int size = (bpp / 8 * width);
+		
+		if (is(flags, DDSD_LINEARSIZE)) {
+		if (pitchOrSize == 0) {
+		    logger.warning("Linear size said to contain valid value but does not");
+		    pitchOrSize = size;
+		} else if (pitchOrSize != size) {
+		    logger.log(Level.WARNING, "Expected size = {0}, real = {1}",
+		            new Object[]{size, pitchOrSize});
+		}
+		} else {
+			pitchOrSize = size;
+		}
+    }                               
+
+    
     /**
      * Computes the sizes of each mipmap level in bytes, and stores it in sizes_[].
      */
