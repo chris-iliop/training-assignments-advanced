@@ -360,8 +360,9 @@ public class SkyFactory {
     public static Spatial createSky(AssetManager assetManager, Texture west,
             Texture east, Texture north, Texture south, Texture up,
             Texture down, Vector3f normalScale) {
-        return createSky(assetManager, west, east, north, south, up, down,
-                normalScale, 10);
+    	TextureDetails textureDetails = new TextureDetails();
+    	...
+        return createSky(textureDetails, normalScale, 10);
     }
 
     /**
@@ -383,16 +384,14 @@ public class SkyFactory {
      * @return a new spatial representing the sky, ready to be attached to the
      * scene graph
      */
-    public static Spatial createSky(AssetManager assetManager, Texture west,
-            Texture east, Texture north, Texture south, Texture up,
-            Texture down, Vector3f normalScale, float sphereRadius) {
+    public static Spatial createSky(TextureDetails textureDetails, Vector3f normalScale, float sphereRadius) {
 
-        Image westImg = west.getImage();
-        Image eastImg = east.getImage();
-        Image northImg = north.getImage();
-        Image southImg = south.getImage();
-        Image upImg = up.getImage();
-        Image downImg = down.getImage();
+        Image westImg = textureDetails.west.getImage();
+        Image eastImg = textureDetails.east.getImage();
+        Image northImg = textureDetails.north.getImage();
+        Image southImg = textureDetails.south.getImage();
+        Image upImg = textureDetails.up.getImage();
+        Image downImg = textureDetails.down.getImage();
 
         checkImagesForCubeMap(westImg, eastImg, northImg, southImg, upImg, downImg);
 
@@ -406,7 +405,17 @@ public class SkyFactory {
         cubeImage.addData(northImg.getData(0));
         
         TextureCubeMap cubeMap = new TextureCubeMap(cubeImage);
-        return createSky(assetManager, cubeMap, normalScale, EnvMapType.CubeMap, sphereRadius);
+        return createSky(textureDetails.assetManager, cubeMap, normalScale, EnvMapType.CubeMap, sphereRadius);
+    }
+    
+    public class TextureDetails {
+    	public AssetManager assetManager;
+    	public Texture west;
+    	public Texture east;
+    	public Texture north;
+    	public Texture south;
+    	public Texture up;
+    	public Texture down;
     }
 
     /**

@@ -535,27 +535,31 @@ public final class Matrix4f implements Savable, Cloneable, java.io.Serializable 
     /**
      * Sets the values of this matrix
      */
-    public void set(float m00, float m01, float m02, float m03,
-            float m10, float m11, float m12, float m13,
-            float m20, float m21, float m22, float m23,
-            float m30, float m31, float m32, float m33) {
+    public void set(MxElement m0, MxElement m1, MxElement m2, MxElement m3) {
 
-        this.m00 = m00;
-        this.m01 = m01;
-        this.m02 = m02;
-        this.m03 = m03;
-        this.m10 = m10;
-        this.m11 = m11;
-        this.m12 = m12;
-        this.m13 = m13;
-        this.m20 = m20;
-        this.m21 = m21;
-        this.m22 = m22;
-        this.m23 = m23;
-        this.m30 = m30;
-        this.m31 = m31;
-        this.m32 = m32;
-        this.m33 = m33;
+        this.m00 = m0.m0;
+        this.m01 = m0.m1;
+        this.m02 = m0.m2;
+        this.m03 = m0.m3;
+        this.m10 = m1.m0;
+        this.m11 = m1.m1;
+        this.m12 = m1.m2;
+        this.m13 = m1.m3;
+        this.m20 = m2.m0;
+        this.m21 = m2.m1;
+        this.m22 = m2.m2;
+        this.m23 = m2.m3;
+        this.m30 = m3.m0;
+        this.m31 = m3.m1;
+        this.m32 = m3.m2;
+        this.m33 = m3.m3;
+    }
+    
+    public class MxElement {
+    	public float m0;
+    	public float m1;
+    	public float m2;
+    	public float m3;
     }
 
     /**
@@ -868,39 +872,46 @@ public final class Matrix4f implements Savable, Cloneable, java.io.Serializable 
         m00 = m11 = m22 = m33 = 1.0f;
     }
 
-    public void fromFrustum(float near, float far, float left, float right, float top, float bottom, boolean parallel) {
+    public void fromFrustum(OrientationDetails orientation, boolean parallel) {
         loadIdentity();
         if (parallel) {
             // scale
-            m00 = 2.0f / (right - left);
-            //m11 = 2.0f / (bottom - top);
-            m11 = 2.0f / (top - bottom);
-            m22 = -2.0f / (far - near);
+            m00 = 2.0f / (orientation.right - orientation.left);
+            m11 = 2.0f / (orientation.top - orientation.bottom);
+            m22 = -2.0f / (orientation.far - orientation.near);
             m33 = 1f;
 
             // translation
-            m03 = -(right + left) / (right - left);
-            //m31 = -(bottom + top) / (bottom - top);
-            m13 = -(top + bottom) / (top - bottom);
-            m23 = -(far + near) / (far - near);
+            m03 = -(orientation.right + orientation.left) / (orientation.right - orientation.left);
+            m13 = -(orientation.top + orientation.bottom) / (orientation.top - orientation.bottom);
+            m23 = -(orientation.far + orientation.near) / (orientation.far - orientation.near);
         } else {
-            m00 = (2.0f * near) / (right - left);
-            m11 = (2.0f * near) / (top - bottom);
+            m00 = (2.0f * orientation.near) / (orientation.right - orientation.left);
+            m11 = (2.0f * orientation.near) / (orientation.top - orientation.bottom);
             m32 = -1.0f;
             m33 = -0.0f;
 
             // A
-            m02 = (right + left) / (right - left);
+            m02 = (orientation.right + orientation.left) / (orientation.right - orientation.left);
 
             // B 
-            m12 = (top + bottom) / (top - bottom);
+            m12 = (orientation.top + orientation.bottom) / (orientation.top - orientation.bottom);
 
             // C
-            m22 = -(far + near) / (far - near);
+            m22 = -(orientation.far + orientation.near) / (orientation.far - orientation.near);
 
             // D
-            m23 = -(2.0f * far * near) / (far - near);
+            m23 = -(2.0f * orientation.far * orientation.near) / (orientation.far - orientation.near);
         }
+    }
+    
+    public class OrientationDetails {
+    	float near;
+    	float far;
+    	float left;
+    	float right;
+    	float top;
+    	float bottom;
     }
 
     /**

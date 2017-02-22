@@ -39,23 +39,30 @@ class BitMaskImageCodec extends ImageCodec {
     final int as, rs, gs, bs;
     boolean be = false;
     
-    public BitMaskImageCodec(int bpp, int flags, int ac, int rc, int gc, int bc, int as, int rs, int gs, int bs) {
+    public BitMaskImageCodec(int bpp, int flags, ImageCodecDetails c, ImageCodecDetails s) {
         super(bpp, flags,
-                (int) (((long) 1 << ac) - 1),
-                (int) (((long) 1 << rc) - 1),
-                (int) (((long) 1 << gc) - 1),
-                (int) (((long) 1 << bc) - 1));
+                (int) (((long) 1 << c.a) - 1),
+                (int) (((long) 1 << c.r) - 1),
+                (int) (((long) 1 << c.g) - 1),
+                (int) (((long) 1 << c.b) - 1));
 
         if (bpp > 4) {
             throw new UnsupportedOperationException("Use ByteAlignedImageCodec for codecs with pixel sizes larger than 4 bytes");
         }
         
-        this.as = as;
-        this.rs = rs;
-        this.gs = gs;
-        this.bs = bs;
+        this.as = s.a;
+        this.rs = s.r;
+        this.gs = s.g;
+        this.bs = s.b;
     }
     
+    public class ImageCodecDetails {
+    	public int a;
+    	public int r;
+    	public int g;
+    	public int b;
+    }
+
     private static int readPixelRaw(ByteBuffer buf, int idx, int bpp) {
         //idx += bpp;
         //int original = buf.get(--idx) & 0xff;
