@@ -405,4 +405,407 @@ public final class Shader extends NativeObject {
     public long getUniqueId() {
         return ((long)OBJTYPE_SHADER << 32) | ((long)id);
     }
+
+    /*********************************************************************\
+     |* Shaders                                                           *|
+     \*********************************************************************/
+    protected void updateUniformLocation(Shader shader, Uniform uniform, GL gl) {
+        int loc = gl.glGetUniformLocation(shader.getId(), uniform.getName());
+        if (loc < 0) {
+            uniform.setLocation(-1);
+            // uniform is not declared in shader
+            logger.log(Level.FINE, "Uniform {0} is not declared in shader {1}.", new Object[]{uniform.getName(), shader.getSources()});
+        } else {
+            uniform.setLocation(loc);
+        }
+    }
+
+    protected void bindProgram(ShaderParameters shaderParameters) {
+        int shaderId = shaderParameters.shader.getId();
+        if (shaderParameters.context.boundShaderProgram != shaderId) {
+            shaderParameters.gl.glUseProgram(shaderId);
+            shaderParameters.statistics.onShaderUse(shader, true);
+            shaderParameters.context.boundShader = shader;
+            shaderParameters.context.boundShaderProgram = shaderId;
+        } else {
+            shaderParameters.statistics.onShaderUse(shader, false);
+        }
+    }
+
+    protected void updateUniform(ShaderParameters shaderParameters) {
+        int shaderId = shader.getId();
+
+        assert uniform.getName() != null;
+        assert shader.getId() > 0;
+
+        bindProgram(shader, gl, context, statistics);
+
+        int loc = uniform.getLocation();
+        if (loc == -1) {
+            return;
+        }
+
+        if (loc == -2) {
+            // get uniform location
+            updateUniformLocation(shader, uniform, gl);
+            if (uniform.getLocation() == -1) {
+                // not declared, ignore
+                uniform.clearUpdateNeeded();
+                return;
+            }
+            loc = uniform.getLocation();
+        }
+
+        if (uniform.getVarType() == null) {
+            return; // value not set yet..
+        }
+        statistics.onUniformSet();
+
+        uniform.clearUpdateNeeded();
+        FloatBuffer fb;
+        IntBuffer ib;
+        switch (uniform.getVarType()) {
+        case Float:
+            Float f = (Float) uniform.getValue();
+            gl.glUniform1f(loc, f.floatValue());
+            break;
+        case Vector2:
+            Vector2f v2 = (Vector2f) uniform.getValue();
+            gl.glUniform2f(loc, v2.getX(), v2.getY());
+            break;
+        case Vector3:
+            Vector3f v3 = (Vector3f) uniform.getValue();
+            gl.glUniform3f(loc, v3.getX(), v3.getY(), v3.getZ());
+            break;
+        case Vector4:
+            Object val = uniform.getValue();
+            if (val instanceof ColorRGBA) {
+                ColorRGBA c = (ColorRGBA) val;
+                gl.glUniform4f(loc, c.r, c.g, c.b, c.a);
+            } else if (val instanceof Vector4f) {
+                Vector4f c = (Vector4f) val;
+                gl.glUniform4f(loc, c.x, c.y, c.z, c.w);
+            } else {
+                Quaternion c = (Quaternion) uniform.getValue();
+                gl.glUniform4f(loc, c.getX(), c.getY(), c.getZ(), c.getW());
+            }
+            break;
+        case Boolean:
+            Boolean b = (Boolean) uniform.getValue();
+            gl.glUniform1i(loc, b.booleanValue() ? GL.GL_TRUE : GL.GL_FALSE);
+            break;
+        case Matrix3:
+            fb = uniform.getMultiData();
+            assert fb.remaining() == 9;
+            gl.glUniformMatrix3(loc, false, fb);
+            break;
+        case Matrix4:
+            fb = uniform.getMultiData();
+            assert fb.remaining() == 16;
+            gl.glUniformMatrix4(loc, false, fb);
+            break;
+        case IntArray:
+            ib = (IntBuffer) uniform.getValue();
+            gl.glUniform1(loc, ib);
+            break;
+        case FloatArray:
+            fb = uniform.getMultiData();
+            gl.glUniform1(loc, fb);
+            break;
+        case Vector2Array:
+            fb = uniform.getMultiData();
+            gl.glUniform2(loc, fb);
+            break;
+        case Vector3Array:
+            fb = uniform.getMultiData();
+            gl.glUniform3(loc, fb);
+            break;
+        case Vector4Array:
+            fb = uniform.getMultiData();
+            gl.glUniform4(loc, fb);
+            break;
+        case Matrix4Array:
+            fb = uniform.getMultiData();
+            gl.glUniformMatrix4(loc, false, fb);
+            break;
+        case Int:
+            Integer i = (Integer) uniform.getValue();
+            gl.glUniform1i(loc, i.intValue());
+            break;
+        default:
+            throw new UnsupportedOperationException("Unsupported uniform type: " + uniform.getVarType());
+        }
+    }
+
+    protected void updateShaderUniforms(ShaderParameters shaderParameters.) {
+        ListMap<String, Uniform> uniforms = shader.getUniformMap();
+        for (int i = 0; i < uniforms.size(); i++) {
+            Uniform uniform = uniforms.getValue(i);
+            if (uniform.isUpdateNeeded()) {
+                updateUniform(shaderParameters.shader, uniform, shaderParameters.gl, shaderParameters.context, shaderParameters.statistics);
+            }
+        }
+    }
+
+    protected void resetUniformLocations(Shader shader) {
+        ListMap<String, Uniform> uniforms = shader.getUniformMap();
+        for (int i = 0; i < uniforms.size(); i++) {
+            Uniform uniform = uniforms.getValue(i);
+            uniform.reset(); // e.g check location again
+        }
+    }
+
+    public int convertShaderType(ShaderType type) {
+        switch (type) {
+        case Fragment:
+            return GL.GL_FRAGMENT_SHADER;
+        case Vertex:
+            return GL.GL_VERTEX_SHADER;
+        case Geometry:
+            return GL3.GL_GEOMETRY_SHADER;
+        case TessellationControl:
+            return GL4.GL_TESS_CONTROL_SHADER;
+        case TessellationEvaluation:
+            return GL4.GL_TESS_EVALUATION_SHADER;
+        default:
+            throw new UnsupportedOperationException("Unrecognized shader type.");
+        }
+    }
+
+    public void updateShaderSourceData(ShaderParameters shaderParameters) {
+        int id = source.getId();
+        if (id == -1) {
+            // Create id
+            id = gl.glCreateShader(convertShaderType(source.getType()));
+            if (id <= 0) {
+                throw new RendererException("Invalid ID received when trying to create shader.");
+            }
+
+            source.setId(id);
+        } else {
+            throw new RendererException("Cannot recompile shader source");
+        }
+
+        boolean gles2 = caps.contains(Caps.OpenGLES20);
+        String language = source.getLanguage();
+
+        if (gles2 && !language.equals("GLSL100")) {
+            throw new RendererException("This shader cannot run in OpenGL ES 2. "
+                    + "Only GLSL 1.00 shaders are supported.");
+        }
+
+        // Upload shader source.
+        // Merge the defines and source code.
+        stringBuf.setLength(0);
+        if (language.startsWith("GLSL")) {
+            int version = Integer.parseInt(language.substring(4));
+            if (version > 100) {
+                stringBuf.append("#version ");
+                stringBuf.append(language.substring(4));
+                if (version >= 150) {
+                    stringBuf.append(" core");
+                }
+                stringBuf.append("\n");
+            } else {
+                if (gles2) {
+                    // request GLSL ES (1.00) when compiling under GLES2.
+                    stringBuf.append("#version 100\n");
+
+                    if (source.getType() == ShaderType.Fragment) {
+                        // GLES2 requires precision qualifier.
+                        stringBuf.append("precision mediump float;\n");
+                    }
+                } else {
+                    // version 100 does not exist in desktop GLSL.
+                    // put version 110 in that case to enable strict checking
+                    // (Only enabled for desktop GL)
+                    stringBuf.append("#version 110\n");
+                }
+            }
+        }
+
+        if (linearizeSrgbImages) {
+            stringBuf.append("#define SRGB 1\n");
+        }
+        stringBuf.append("#define ").append(source.getType().name().toUpperCase()).append("_SHADER 1\n");
+
+        stringBuf.append(source.getDefines());
+        stringBuf.append(source.getSource());
+
+        intBuf1.clear();
+        intBuf1.put(0, stringBuf.length());
+        gl.glShaderSource(id, new String[]{ stringBuf.toString() }, intBuf1);
+        gl.glCompileShader(id);
+
+        gl.glGetShader(id, GL.GL_COMPILE_STATUS, intBuf1);
+
+        boolean compiledOK = intBuf1.get(0) == GL.GL_TRUE;
+        String infoLog = null;
+
+        if (VALIDATE_SHADER || !compiledOK) {
+            // even if compile succeeded, check
+            // log for warnings
+            gl.glGetShader(id, GL.GL_INFO_LOG_LENGTH, intBuf1);
+            int length = intBuf1.get(0);
+            if (length > 3) {
+                // get infos
+                infoLog = gl.glGetShaderInfoLog(id, length);
+            }
+        }
+
+        if (compiledOK) {
+            if (infoLog != null) {
+                logger.log(Level.WARNING, "{0} compiled successfully, compiler warnings: \n{1}",
+                        new Object[]{source.getName(), infoLog});
+            } else {
+                logger.log(Level.FINE, "{0} compiled successfully.", source.getName());
+            }
+            source.clearUpdateNeeded();
+        } else {
+            if (infoLog != null) {
+                throw new RendererException("compile error in: " + source + "\n" + infoLog);
+            } else {
+                throw new RendererException("compile error in: " + source + "\nerror: <not provided>");
+            }
+        }
+    }
+
+    public void updateShaderData(ShaderParameters shaderParameters) {
+        int id = shader.getId();
+        boolean needRegister = false;
+        if (id == -1) {
+            // create program
+            id = gl.glCreateProgram();
+            if (id == 0) {
+                throw new RendererException("Invalid ID (" + id + ") received when trying to create shader program.");
+            }
+
+            shader.setId(id);
+            needRegister = true;
+        }
+
+        // If using GLSL 1.5, we bind the outputs for the user
+        // For versions 3.3 and up, user should use layout qualifiers instead.
+        boolean bindFragDataRequired = false;
+
+        for (ShaderSource source : shader.getSources()) {
+            if (source.isUpdateNeeded()) {
+                updateShaderSourceData(source, gl, caps, stringBuf, linearizeSrgbImages, intBuf1);
+            }
+            if (source.getType() == ShaderType.Fragment
+                    && source.getLanguage().equals("GLSL150")) {
+                bindFragDataRequired = true;
+            }
+            gl.glAttachShader(id, source.getId());
+        }
+
+        if (bindFragDataRequired) {
+            // Check if GLSL version is 1.5 for shader
+            gl3.glBindFragDataLocation(id, 0, "outFragColor");
+            // For MRT
+            for (int i = 0; i < limits.get(Limits.FrameBufferMrtAttachments); i++) {
+                gl3.glBindFragDataLocation(id, i, "outFragData[" + i + "]");
+            }
+        }
+
+        // Link shaders to program
+        gl.glLinkProgram(id);
+
+        // Check link status
+        gl.glGetProgram(id, GL.GL_LINK_STATUS, intBuf1);
+        boolean linkOK = intBuf1.get(0) == GL.GL_TRUE;
+        String infoLog = null;
+
+        if (VALIDATE_SHADER || !linkOK) {
+            gl.glGetProgram(id, GL.GL_INFO_LOG_LENGTH, intBuf1);
+            int length = intBuf1.get(0);
+            if (length > 3) {
+                // get infos
+                infoLog = gl.glGetProgramInfoLog(id, length);
+            }
+        }
+
+        if (linkOK) {
+            if (infoLog != null) {
+                logger.log(Level.WARNING, "Shader linked successfully. Linker warnings: \n{0}", infoLog);
+            } else {
+                logger.fine("Shader linked successfully.");
+            }
+            shader.clearUpdateNeeded();
+            if (needRegister) {
+                // Register shader for clean up if it was created in this method.
+                objManager.registerObject(shader);
+                statistics.onNewShader();
+            } else {
+                // OpenGL spec: uniform locations may change after re-link
+                resetUniformLocations(shader);
+            }
+        } else {
+            if (infoLog != null) {
+                throw new RendererException("Shader failed to link, shader:" + shader + "\n" + infoLog);
+            } else {
+                throw new RendererException("Shader failed to link, shader:" + shader + "\ninfo: <not provided>");
+            }
+        }
+    }
+
+    public void setShader(ShaderParameters shaderParameters) {
+        if (shader == null) {
+            throw new IllegalArgumentException("Shader cannot be null");
+        } else {
+            if (shader.isUpdateNeeded()) {
+                updateShaderData(shader, source, gl, caps, stringBuf, linearizeSrgbImages, intBuf1, gl3, objManager, statistics);
+            }
+
+            // NOTE: might want to check if any of the
+            // sources need an update?
+
+            assert shader.getId() > 0;
+
+            updateShaderUniforms(shader);
+            bindProgram(shader, gl, context, statistics);
+        }
+    }
+
+    public void deleteShaderSource(ShaderSource source, GL gl) {
+        if (source.getId() < 0) {
+            logger.warning("Shader source is not uploaded to GPU, cannot delete.");
+            return;
+        }
+        source.clearUpdateNeeded();
+        gl.glDeleteShader(source.getId());
+        source.resetObject();
+    }
+
+    public void deleteShader(ShaderParameters shaderParameters) {
+        if (shaderParameters.shader.getId() == -1) {
+            logger.warning("Shader is not uploaded to GPU, cannot delete.");
+            return;
+        }
+
+        for (ShaderSource source : shaderParameters.shader.getSources()) {
+            if (source.getId() != -1) {
+                shaderParameters.gl.glDetachShader(shaderParameters.shader.getId(), shaderParameters.source.getId());
+                deleteShaderSource(shaderParameters.source, shaderParameters.gl);
+            }
+        }
+
+        shaderParameters.gl.glDeleteProgram(shaderParameters.shader.getId());
+        shaderParameters.statistics.onDeleteShader();
+        shaderParameters.shader.resetObject();
+    }
+
+    public class ShaderParameters {
+        Shader shader;
+        ShaderSource source;
+        Gl gl;
+        EnumSet<Caps> caps;
+        StringBuilder stringBuf;
+        boolean linearizeSrgbImages;
+        IntBuffer intBuf1;
+        GL3 gl3;
+        NativeObjectManager objManager;
+        Statistics statistics;
+        RenderContext context;
+    }
 }
