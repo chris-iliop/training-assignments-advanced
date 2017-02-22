@@ -484,60 +484,13 @@ public class DDSLoader implements AssetLoader {
      * @throws java.io.IOException If an error occured while reading from InputStream
      */
     public ByteBuffer readRGB2D(boolean flip, int totalSize) throws IOException {
-        int redCount = count(redMask),
-                blueCount = count(blueMask),
-                greenCount = count(greenMask),
-                alphaCount = count(alphaMask);
 
-        if (redMask == 0x00FF0000 && greenMask == 0x0000FF00 && blueMask == 0x000000FF) {
-            if (alphaMask == 0xFF000000 && bpp == 32) {
-                logger.finest("Data source format: BGRA8");
-            } else if (bpp == 24) {
-                logger.finest("Data source format: BGR8");
-            }
-        }
-
-        int sourcebytesPP = bpp / 8;
-        int targetBytesPP = pixelFormat.getBitsPerPixel() / 8;
+    	logDataSourceFormat();
 
         ByteBuffer dataBuffer = BufferUtils.createByteBuffer(totalSize);
 
-        int mipWidth = width;
-        int mipHeight = height;
-
         int offset = 0;
-        byte[] b = new byte[sourcebytesPP];
-        for (int mip = 0; mip < mipMapCount; mip++) {
-            for (int y = 0; y < mipHeight; y++) {
-                for (int x = 0; x < mipWidth; x++) {
-                    in.readFully(b);
-
-                    int i = byte2int(b);
-
-                    byte red = (byte) (((i & redMask) >> redCount));
-                    byte green = (byte) (((i & greenMask) >> greenCount));
-                    byte blue = (byte) (((i & blueMask) >> blueCount));
-                    byte alpha = (byte) (((i & alphaMask) >> alphaCount));
-
-                    if (flip) {
-                        dataBuffer.position(offset + ((mipHeight - y - 1) * mipWidth + x) * targetBytesPP);
-                    }
-                    //else
-                    //    dataBuffer.position(offset + (y * width + x) * targetBytesPP);
-
-                    if (alphaMask == 0) {
-                        dataBuffer.put(red).put(green).put(blue);
-                    } else {
-                        dataBuffer.put(red).put(green).put(blue).put(alpha);
-                    }
-                }
-            }
-
-            offset += mipWidth * mipHeight * targetBytesPP;
-
-            mipWidth = Math.max(mipWidth / 2, 1);
-            mipHeight = Math.max(mipHeight / 2, 1);
-        }
+        handleMip(dataBuffer, offset);
 
         return dataBuffer;
     }
@@ -625,11 +578,21 @@ public class DDSLoader implements AssetLoader {
      * @throws java.io.IOException If an error occured while reading from InputStream
      */
     public ByteBuffer readRGB3D(boolean flip, int totalSize) throws IOException {
-        int redCount = count(redMask),
-                blueCount = count(blueMask),
-                greenCount = count(greenMask),
-                alphaCount = count(alphaMask);
 
+    	logDataSourceFormat();
+
+        ByteBuffer dataBuffer = BufferUtils.createByteBuffer(totalSize * depth);
+
+        for (int k = 0; k < depth; k++) {
+              int offset = k * totalSize;
+              handleMip(dataBuffer, offset);
+        }
+        
+        dataBuffer.rewind();
+        return dataBuffer;
+    }
+    
+    public void logDataSourceFormat() {
         if (redMask == 0x00FF0000 && greenMask == 0x0000FF00 && blueMask == 0x000000FF) {
             if (alphaMask == 0xFF000000 && bpp == 32) {
                 logger.finest("Data source format: BGRA8");
@@ -637,54 +600,52 @@ public class DDSLoader implements AssetLoader {
                 logger.finest("Data source format: BGR8");
             }
         }
-
-        int sourcebytesPP = bpp / 8;
-        int targetBytesPP = pixelFormat.getBitsPerPixel() / 8;
-
-        ByteBuffer dataBuffer = BufferUtils.createByteBuffer(totalSize * depth);
-
-        for (int k = 0; k < depth; k++) {
-            //   ByteBuffer dataBuffer = BufferUtils.createByteBuffer(totalSize);
-            int mipWidth = width;
-            int mipHeight = height;
-            int offset = k * totalSize;
-            byte[] b = new byte[sourcebytesPP];
-            for (int mip = 0; mip < mipMapCount; mip++) {
-                for (int y = 0; y < mipHeight; y++) {
-                    for (int x = 0; x < mipWidth; x++) {
-                        in.readFully(b);
-
-                        int i = byte2int(b);
-
-                        byte red = (byte) (((i & redMask) >> redCount));
-                        byte green = (byte) (((i & greenMask) >> greenCount));
-                        byte blue = (byte) (((i & blueMask) >> blueCount));
-                        byte alpha = (byte) (((i & alphaMask) >> alphaCount));
-
-                        if (flip) {
-                            dataBuffer.position(offset + ((mipHeight - y - 1) * mipWidth + x) * targetBytesPP);
-                        }
-                        //else
-                        //    dataBuffer.position(offset + (y * width + x) * targetBytesPP);
-
-                        if (alphaMask == 0) {
-                            dataBuffer.put(red).put(green).put(blue);
-                        } else {
-                            dataBuffer.put(red).put(green).put(blue).put(alpha);
-                        }
-                    }
-                }
-
-                offset += (mipWidth * mipHeight * targetBytesPP);
-
-                mipWidth = Math.max(mipWidth / 2, 1);
-                mipHeight = Math.max(mipHeight / 2, 1);
-            }
-        }
-        dataBuffer.rewind();
-        return dataBuffer;
     }
 
+    
+    public void handleMip(ByteBuffer dataBuffer, int offset) {
+    	
+    	int redCount = count(redMask),
+                blueCount = count(blueMask),
+                greenCount = count(greenMask),
+                alphaCount = count(alphaMask);
+    	int mipWidth = width;
+        int mipHeight = height;
+        int sourcebytesPP = bpp / 8;
+        int targetBytesPP = pixelFormat.getBitsPerPixel() / 8;
+    	byte[] b = new byte[sourcebytesPP];
+    	
+        for (int mip = 0; mip < mipMapCount; mip++) {
+            for (int y = 0; y < mipHeight; y++) {
+                for (int x = 0; x < mipWidth; x++) {
+                    in.readFully(b);
+
+                    int i = byte2int(b);
+
+                    byte red = (byte) (((i & redMask) >> redCount));
+                    byte green = (byte) (((i & greenMask) >> greenCount));
+                    byte blue = (byte) (((i & blueMask) >> blueCount));
+                    byte alpha = (byte) (((i & alphaMask) >> alphaCount));
+
+                    if (flip) {
+                        dataBuffer.position(offset + ((mipHeight - y - 1) * mipWidth + x) * targetBytesPP);
+                    }
+
+                    if (alphaMask == 0) {
+                        dataBuffer.put(red).put(green).put(blue);
+                    } else {
+                        dataBuffer.put(red).put(green).put(blue).put(alpha);
+                    }
+                }
+            }
+            offset += mipWidth * mipHeight * targetBytesPP;
+
+            mipWidth = Math.max(mipWidth / 2, 1);
+            mipHeight = Math.max(mipHeight / 2, 1);
+       }
+    }
+    
+    
     /**
      * Reads a DXT compressed image from the InputStream
      *
